@@ -491,8 +491,10 @@ fn daemonCommand(allocator: mem.Allocator) !void {
         // Use raw syscall to avoid error set issues
         const SOCK_CLOEXEC: u32 = 0x80000;
         const result = std.os.linux.accept4(sock, null, null, SOCK_CLOEXEC);
-        const errno = std.os.linux.E.init(result);
-        if (errno != .SUCCESS) {
+
+        // Check for error - negative results indicate errno
+        const signed_result: isize = @bitCast(result);
+        if (signed_result < 0) {
             posix.nanosleep(0, 100_000_000); // 100ms
             continue;
         }
