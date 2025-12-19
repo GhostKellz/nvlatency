@@ -54,7 +54,7 @@ pub const Timer = timing.Timer;
 /// Library version
 pub const version = std.SemanticVersion{
     .major = 0,
-    .minor = 1,
+    .minor = 2,
     .patch = 0,
 };
 
@@ -85,7 +85,7 @@ pub const required_extensions = struct {
 
 test "version" {
     try std.testing.expectEqual(@as(u8, 0), version.major);
-    try std.testing.expectEqual(@as(u8, 1), version.minor);
+    try std.testing.expectEqual(@as(u8, 2), version.minor);
     try std.testing.expectEqual(@as(u8, 0), version.patch);
 }
 

@@ -4,6 +4,13 @@
 
 A comprehensive toolkit for measuring, analyzing, and reducing input-to-display latency on NVIDIA GPUs under Linux. Brings Windows-level Reflex functionality to the Linux gaming ecosystem.
 
+## Driver 590+ Optimizations
+
+nvlatency is optimized for NVIDIA 590.48.01+ drivers which include:
+- **Vulkan swapchain recreation performance** - Enables stutter-free latency marker injection during window resize/mode changes
+- **Improved VK_NV_low_latency2 behavior** - More reliable Reflex integration
+- **Better Wayland support** - Full functionality on modern Wayland compositors (1.20+)
+
 ## Overview
 
 nvlatency provides:
@@ -175,9 +182,10 @@ nvlatency run --mode boost -- %command%
 ## Requirements
 
 - NVIDIA GPU (GTX 900 series or newer for Reflex)
-- NVIDIA driver 535+
+- NVIDIA driver 590+ (recommended for swapchain performance fixes)
+  - Minimum: 535+ (basic functionality)
 - Vulkan 1.3+
-- Zig 0.12+
+- Zig 0.16+
 
 ## License
 
