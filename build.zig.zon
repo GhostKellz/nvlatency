@@ -34,7 +34,7 @@
     .dependencies = .{
         .nvvk = .{
             .url = "https://github.com/ghostkellz/nvvk/archive/main.tar.gz",
-            .hash = "nvvk-0.0.0-mPNRRjcFAQDGwCe5EY-C-Jkh5oBq8s8tMABwjD4Jt22c",
+            .hash = "nvvk-0.4.0-mPNRRsd1AwCo1K0RG_2a_g4du3OpHWTDjkegrDcWPTA2",
         },
     },
     .paths = .{
