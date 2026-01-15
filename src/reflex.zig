@@ -291,12 +291,13 @@ test "ReflexMode to ModeConfig" {
 }
 
 test "LatencyMeasurement basic flow" {
+    const io = std.testing.io;
     var measurement = LatencyMeasurement{};
 
     _ = measurement.beginFrame();
-    std.posix.nanosleep(0, 1_000_000); // 1ms sim
+    try std.Io.Clock.Duration.sleep(.{ .clock = .awake, .raw = .fromMilliseconds(1) }, io); // 1ms sim
     measurement.markSimulationEnd();
-    std.posix.nanosleep(0, 500_000); // 0.5ms render
+    try std.Io.Clock.Duration.sleep(.{ .clock = .awake, .raw = .fromNanoseconds(500_000) }, io); // 0.5ms render
     measurement.markRenderSubmit();
     const frame = measurement.endFrame();
 

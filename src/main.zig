@@ -14,13 +14,14 @@ const socket_path = "/tmp/nvlatency.sock";
 /// Config file for persistent settings
 const config_path_suffix = "/.config/nvlatency/config";
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+/// Global init for use by functions
+var global_init: ?*const std.process.Init = null;
 
-    const args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, args);
+pub fn main(init: std.process.Init) !void {
+    global_init = &init;
+    const allocator = init.gpa;
+
+    const args = try init.minimal.args.toSlice(init.arena.allocator());
 
     if (args.len < 2) {
         printUsage();
@@ -250,28 +251,31 @@ fn enableCommand(args: []const []const u8) !void {
         return;
     };
 
+    const io = global_init.?.io;
+
     // Write config to enable Reflex globally
-    const home = std.posix.getenv("HOME") orelse "/tmp";
+    const home: []const u8 = if (global_init) |init| (init.minimal.environ.getPosix("HOME") orelse "/tmp") else "/tmp";
     var path_buf: [512]u8 = undefined;
     const config_dir = std.fmt.bufPrint(&path_buf, "{s}/.config/nvlatency", .{home}) catch return;
 
     // Create config directory
-    fs.cwd().makePath(config_dir) catch {};
+    const cwd = std.Io.Dir.cwd();
+    cwd.createDirPath(io, config_dir) catch {};
 
     var path_buf2: [512]u8 = undefined;
     const config_file = std.fmt.bufPrint(&path_buf2, "{s}/config", .{config_dir}) catch return;
 
     // Write config
-    const file = fs.cwd().createFile(config_file, .{}) catch |err| {
+    const file = cwd.createFile(io, config_file, .{}) catch |err| {
         std.debug.print("Failed to write config: {}\n", .{err});
         return;
     };
-    defer file.close();
+    defer file.close(io);
 
     // Write directly to file
     var config_buf: [64]u8 = undefined;
     const config_data = std.fmt.bufPrint(&config_buf, "reflex_mode={s}\n", .{mode_str}) catch return;
-    _ = file.write(config_data) catch {};
+    file.writeStreamingAll(io, config_data) catch {};
 
     std.debug.print("Reflex mode set to: {s}\n", .{mode_str});
     std.debug.print("Config written to: {s}\n", .{config_file});
@@ -280,18 +284,20 @@ fn enableCommand(args: []const []const u8) !void {
 }
 
 fn disableCommand() !void {
-    const home = std.posix.getenv("HOME") orelse "/tmp";
+    const io = global_init.?.io;
+    const home: []const u8 = if (global_init) |init| (init.minimal.environ.getPosix("HOME") orelse "/tmp") else "/tmp";
     var path_buf: [512]u8 = undefined;
     const config_file = std.fmt.bufPrint(&path_buf, "{s}/.config/nvlatency/config", .{home}) catch return;
 
     // Write disabled config
-    const file = fs.cwd().createFile(config_file, .{}) catch |err| {
+    const cwd = std.Io.Dir.cwd();
+    const file = cwd.createFile(io, config_file, .{}) catch |err| {
         std.debug.print("Failed to write config: {}\n", .{err});
         return;
     };
-    defer file.close();
+    defer file.close(io);
 
-    _ = file.write("reflex_mode=off\n") catch {};
+    file.writeStreamingAll(io, "reflex_mode=off\n") catch {};
 
     std.debug.print("Reflex disabled.\n", .{});
     std.debug.print("Config written to: {s}\n", .{config_file});
@@ -309,6 +315,9 @@ fn measureCommand(allocator: mem.Allocator, args: []const []const u8) !void {
         return;
     }
 
+    const io = global_init.?.io;
+    const cwd = std.Io.Dir.cwd();
+
     const pid_str = args[0];
     const pid = std.fmt.parseInt(i32, pid_str, 10) catch {
         std.debug.print("Invalid PID: {s}\n", .{pid_str});
@@ -322,7 +331,7 @@ fn measureCommand(allocator: mem.Allocator, args: []const []const u8) !void {
     var proc_path_buf: [64]u8 = undefined;
     const proc_path = std.fmt.bufPrint(&proc_path_buf, "/proc/{d}/comm", .{pid}) catch return;
 
-    const proc_name = fs.cwd().readFileAlloc(proc_path, allocator, .unlimited) catch {
+    const proc_name = cwd.readFileAlloc(io, proc_path, allocator, .unlimited) catch {
         std.debug.print("Process {d} not found or not accessible.\n", .{pid});
         return;
     };
@@ -335,8 +344,7 @@ fn measureCommand(allocator: mem.Allocator, args: []const []const u8) !void {
     var shm_path_buf: [64]u8 = undefined;
     const shm_path = std.fmt.bufPrint(&shm_path_buf, "/dev/shm/nvlatency_{d}", .{pid}) catch return;
 
-    const shm_exists = fs.cwd().access(shm_path, .{});
-    if (shm_exists) |_| {
+    if (cwd.access(io, shm_path, .{})) {
         std.debug.print("Found nvlatency shared memory at {s}\n", .{shm_path});
         std.debug.print("Reading metrics...\n\n", .{});
 
@@ -408,7 +416,10 @@ fn runCommand(allocator: mem.Allocator, args: []const []const u8) !void {
     std.debug.print("\n", .{});
 
     // Set up environment for the Vulkan layer
-    var env_map = try std.process.getEnvMap(allocator);
+    var env_map = if (global_init) |init|
+        try init.environ_map.clone(allocator)
+    else
+        std.process.Environ.Map.init(allocator);
     defer env_map.deinit();
 
     // Enable nvlatency Vulkan layer
@@ -429,26 +440,27 @@ fn runCommand(allocator: mem.Allocator, args: []const []const u8) !void {
 
     std.debug.print("Starting process...\n\n", .{});
 
-    // Use ChildProcess for simpler execution
-    var child = std.process.Child.init(cmd_args, allocator);
-    child.env_map = &env_map;
-
-    _ = child.spawn() catch |err| {
+    // Spawn child process with environment
+    const io = global_init.?.io;
+    var child = std.process.spawn(io, .{
+        .argv = cmd_args,
+        .environ_map = &env_map,
+    }) catch |err| {
         std.debug.print("Failed to spawn process: {}\n", .{err});
         return;
     };
 
-    const term = child.wait() catch |err| {
+    const term = child.wait(io) catch |err| {
         std.debug.print("Failed to wait for process: {}\n", .{err});
         return;
     };
 
     switch (term) {
-        .Exited => |code| {
+        .exited => |code| {
             std.debug.print("\nProcess exited with code: {d}\n", .{code});
         },
-        .Signal => |sig| {
-            std.debug.print("\nProcess killed by signal: {d}\n", .{sig});
+        .signal => |sig| {
+            std.debug.print("\nProcess killed by signal: {d}\n", .{@intFromEnum(sig)});
         },
         else => {
             std.debug.print("\nProcess terminated abnormally\n", .{});
@@ -464,43 +476,58 @@ fn daemonCommand(allocator: mem.Allocator) !void {
     std.debug.print("nvlatency daemon starting...\n", .{});
     std.debug.print("Socket: {s}\n\n", .{socket_path});
 
-    // Remove existing socket
-    fs.cwd().deleteFile(socket_path) catch {};
+    const io = global_init.?.io;
 
-    // Create Unix domain socket
-    const sock = try posix.socket(posix.AF.UNIX, posix.SOCK.STREAM, 0);
-    defer posix.close(sock);
+    // Remove existing socket
+    std.Io.Dir.cwd().deleteFile(io, socket_path) catch {};
+
+    // Create Unix domain socket using libc
+    const sock = std.c.socket(std.c.AF.UNIX, std.c.SOCK.STREAM, 0);
+    if (sock < 0) {
+        std.debug.print("Failed to create socket\n", .{});
+        return;
+    }
+    defer {
+        if (std.c.close(sock) < 0) {
+            std.debug.print("Warning: failed to close server socket\n", .{});
+        }
+    }
 
     // Bind to socket path
-    var addr: posix.sockaddr.un = .{ .path = undefined };
+    var addr: std.c.sockaddr.un = .{ .family = std.c.AF.UNIX, .path = undefined };
     @memset(&addr.path, 0);
     const path_bytes: []const u8 = socket_path;
     @memcpy(addr.path[0..path_bytes.len], path_bytes);
 
-    try posix.bind(sock, @ptrCast(&addr), @sizeOf(posix.sockaddr.un));
-    try posix.listen(sock, 5);
+    if (std.c.bind(sock, @ptrCast(&addr), @sizeOf(std.c.sockaddr.un)) < 0) {
+        std.debug.print("Failed to bind socket\n", .{});
+        return;
+    }
+    if (std.c.listen(sock, 5) < 0) {
+        std.debug.print("Failed to listen on socket\n", .{});
+        return;
+    }
 
     // Make socket accessible
-    _ = posix.fchmodat(posix.AT.FDCWD, socket_path, 0o666, 0) catch {};
+    if (std.c.chmod(socket_path, 0o666) < 0) {
+        std.debug.print("Warning: failed to set socket permissions\n", .{});
+    }
 
     std.debug.print("Listening for connections...\n", .{});
     std.debug.print("Press Ctrl+C to stop.\n\n", .{});
 
     // Main loop
     while (true) {
-        // Use raw syscall to avoid error set issues
-        const SOCK_CLOEXEC: u32 = 0x80000;
-        const result = std.os.linux.accept4(sock, null, null, SOCK_CLOEXEC);
-
-        // Check for error - negative results indicate errno
-        const signed_result: isize = @bitCast(result);
-        if (signed_result < 0) {
-            posix.nanosleep(0, 100_000_000); // 100ms
+        const client = std.c.accept(sock, null, null);
+        if (client < 0) {
+            std.Io.Clock.Duration.sleep(.{ .clock = .awake, .raw = .fromMilliseconds(100) }, io) catch {};
             continue;
         }
-
-        const client: posix.socket_t = @intCast(result);
-        defer posix.close(client);
+        defer {
+            if (std.c.close(client) < 0) {
+                std.debug.print("Warning: failed to close client socket\n", .{});
+            }
+        }
 
         handleDaemonClient(allocator, client) catch |err| {
             std.debug.print("Client error: {}\n", .{err});
@@ -508,12 +535,17 @@ fn daemonCommand(allocator: mem.Allocator) !void {
     }
 }
 
-fn handleDaemonClient(allocator: mem.Allocator, client: posix.socket_t) !void {
+fn handleDaemonClient(allocator: mem.Allocator, client: std.c.fd_t) !void {
     var buf: [1024]u8 = undefined;
-    const n = try posix.recv(client, &buf, 0);
-    if (n == 0) return;
+    const n = std.c.recv(client, &buf, buf.len, 0);
+    if (n <= 0) {
+        if (n < 0) {
+            std.debug.print("Warning: recv failed on client socket\n", .{});
+        }
+        return;
+    }
 
-    const request = std.mem.trim(u8, buf[0..n], &[_]u8{ '\n', '\r', ' ', 0 });
+    const request = std.mem.trim(u8, buf[0..@intCast(n)], &[_]u8{ '\n', '\r', ' ', 0 });
 
     var response_buf: [4096]u8 = undefined;
     var response: []const u8 = undefined;
@@ -543,7 +575,10 @@ fn handleDaemonClient(allocator: mem.Allocator, client: posix.socket_t) !void {
         response = "{\"status\":\"error\",\"message\":\"unknown command\"}";
     }
 
-    _ = try posix.send(client, response, 0);
+    const sent = std.c.send(client, response.ptr, response.len, 0);
+    if (sent < 0) {
+        std.debug.print("Warning: send failed on client socket\n", .{});
+    }
 }
 
 // =============================================================================

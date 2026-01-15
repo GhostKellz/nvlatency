@@ -48,7 +48,7 @@ pub fn build(b: *std.Build) void {
     });
 
     // Link Vulkan
-    lib.linkSystemLibrary("vulkan");
+    lib.root_module.linkSystemLibrary("vulkan", .{});
 
     // Install library
     b.installArtifact(lib);
@@ -72,7 +72,7 @@ pub fn build(b: *std.Build) void {
             },
         }),
     });
-    exe.linkSystemLibrary("vulkan");
+    exe.root_module.linkSystemLibrary("vulkan", .{});
     b.installArtifact(exe);
 
     // Run step
@@ -98,10 +98,35 @@ pub fn build(b: *std.Build) void {
             },
         }),
     });
-    mod_tests.linkSystemLibrary("vulkan");
+    mod_tests.root_module.linkSystemLibrary("vulkan", .{});
 
     const run_mod_tests = b.addRunArtifact(mod_tests);
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_mod_tests.step);
+
+    // =========================================================================
+    // Vulkan Layer (libnvlatency_layer.so)
+    // =========================================================================
+    const layer_lib = b.addLibrary(.{
+        .linkage = .dynamic,
+        .name = "nvlatency_layer",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("layer/vk_layer.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+        }),
+    });
+    layer_lib.root_module.linkSystemLibrary("vulkan", .{});
+    b.installArtifact(layer_lib);
+
+    // Layer installation step
+    const layer_step = b.step("layer", "Install Vulkan layer manifest");
+    const install_manifest = b.addInstallFile(
+        b.path("nvlatency_layer.json"),
+        "share/vulkan/implicit_layer.d/nvlatency_layer.json",
+    );
+    layer_step.dependOn(&install_manifest.step);
+    layer_step.dependOn(&layer_lib.step);
 }

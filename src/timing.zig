@@ -193,11 +193,12 @@ pub fn RollingAverage(comptime size: usize) type {
 // =============================================================================
 
 test "Timer basic" {
+    const io = std.testing.io;
     var timer = Timer{};
     timer.start();
 
-    // Sleep a tiny bit
-    posix.nanosleep(0, 1_000_000); // 1ms
+    // Sleep a tiny bit using proper Io-based sleep
+    try std.Io.Clock.Duration.sleep(.{ .clock = .awake, .raw = .fromMilliseconds(1) }, io);
 
     const elapsed = timer.elapsedUs();
     try std.testing.expect(elapsed >= 900); // At least 0.9ms
@@ -205,8 +206,9 @@ test "Timer basic" {
 }
 
 test "Timestamp duration" {
+    const io = std.testing.io;
     const t1 = Timestamp.now();
-    posix.nanosleep(0, 1_000_000); // 1ms
+    try std.Io.Clock.Duration.sleep(.{ .clock = .awake, .raw = .fromMilliseconds(1) }, io);
     const t2 = Timestamp.now();
 
     const duration_us = t1.durationToUs(t2);
