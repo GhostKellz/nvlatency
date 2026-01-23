@@ -1,5 +1,7 @@
 # nvlatency
 
+> **⚠️ Experimental Project** - This project is under active development and not fully tested. Use at your own risk.
+
 **NVIDIA Reflex & Frame Latency Tools for Linux**
 
 A comprehensive toolkit for measuring, analyzing, and reducing input-to-display latency on NVIDIA GPUs under Linux. Brings Windows-level Reflex functionality to the Linux gaming ecosystem.
