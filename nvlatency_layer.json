@@ -1,0 +1,22 @@
+{
+    "file_format_version": "1.2.0",
+    "layer": {
+        "name": "VK_LAYER_NVLATENCY_reflex",
+        "type": "GLOBAL",
+        "library_path": "/data/projects/nvlatency/zig-out/lib/libnvlatency_layer.so",
+        "api_version": "1.3.283",
+        "implementation_version": "1",
+        "description": "nvlatency - NVIDIA Reflex Low Latency Layer (VK_NV_low_latency2)",
+        "functions": {
+            "vkGetInstanceProcAddr": "nvlatency_GetInstanceProcAddr",
+            "vkGetDeviceProcAddr": "nvlatency_GetDeviceProcAddr",
+            "vkNegotiateLoaderLayerInterfaceVersion": "vkNegotiateLoaderLayerInterfaceVersion"
+        },
+        "enable_environment": {
+            "NVLATENCY": "1"
+        },
+        "disable_environment": {
+            "DISABLE_NVLATENCY": "1"
+        }
+    }
+}

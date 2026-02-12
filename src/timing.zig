@@ -4,11 +4,12 @@
 //! for accurate frame timing and latency calculations.
 
 const std = @import("std");
-const posix = std.posix;
+const c = std.c;
 
 /// Get current time in nanoseconds from monotonic clock
 fn getNanoTime() i128 {
-    const ts = posix.clock_gettime(.MONOTONIC) catch return 0;
+    var ts: c.timespec = undefined;
+    if (c.clock_gettime(.MONOTONIC, &ts) != 0) return 0;
     return @as(i128, ts.sec) * 1_000_000_000 + ts.nsec;
 }
 
