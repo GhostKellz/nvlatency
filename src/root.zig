@@ -55,7 +55,7 @@ pub const Timer = timing.Timer;
 pub const version = std.SemanticVersion{
     .major = 0,
     .minor = 2,
-    .patch = 3,
+    .patch = 4,
 };
 
 /// Check if running on NVIDIA GPU
@@ -86,7 +86,7 @@ pub const required_extensions = struct {
 test "version" {
     try std.testing.expectEqual(@as(u8, 0), version.major);
     try std.testing.expectEqual(@as(u8, 2), version.minor);
-    try std.testing.expectEqual(@as(u8, 3), version.patch);
+    try std.testing.expectEqual(@as(u8, 4), version.patch);
 }
 
 test {

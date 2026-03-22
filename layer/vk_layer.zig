@@ -302,8 +302,9 @@ const SwapchainData = struct {
 // Global State
 // ============================================================================
 
-var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-var allocator: std.mem.Allocator = undefined;
+/// Use c_allocator since we link libc
+const c_alloc = std.heap.c_allocator;
+var allocator: std.mem.Allocator = c_alloc;
 var initialized = false;
 var layer_enabled = false;
 var reflex_mode: enum { off, on, boost } = .on;
@@ -322,7 +323,6 @@ fn initGlobalState() void {
 
     if (initialized) return;
 
-    allocator = gpa.allocator();
     instance_map = std.AutoHashMap(usize, *InstanceData).init(allocator);
     device_map = std.AutoHashMap(usize, *DeviceData).init(allocator);
     swapchain_map = std.AutoHashMap(u64, *SwapchainData).init(allocator);

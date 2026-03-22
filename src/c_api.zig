@@ -56,7 +56,8 @@ const LatencyHandle = struct {
     ctx: nvlatency.LatencyContext,
 };
 
-var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+/// Use c_allocator since we link libc
+const allocator = std.heap.c_allocator;
 
 // =============================================================================
 // Initialization
@@ -68,8 +69,6 @@ export fn nvlat_init(
     swapchain: NvlatSwapchain,
     get_device_proc_addr: *const fn (*anyopaque, [*:0]const u8) callconv(.c) ?*const fn () callconv(.c) void,
 ) ?*LatencyHandle {
-    const allocator = gpa.allocator();
-
     const handle = allocator.create(LatencyHandle) catch return null;
 
     const vk_device: nvvk.VkDevice = @ptrCast(device);
@@ -86,7 +85,7 @@ export fn nvlat_init(
 /// Destroy latency context
 export fn nvlat_destroy(handle: ?*LatencyHandle) void {
     if (handle) |h| {
-        gpa.allocator().destroy(h);
+        allocator.destroy(h);
     }
 }
 
